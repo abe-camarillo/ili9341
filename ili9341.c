@@ -20,7 +20,6 @@
 #include <linux/of_address.h>
 #include <linux/version.h>
 #include <linux/ioport.h>
-#include <linux/utsname.h>
 
 
 #define BLOCKSIZE (4*1024)
@@ -577,12 +576,9 @@ static int ili9341_probe(struct platform_device *pdev)
     int vmem_size;
     unsigned char *vmem;
 
-    // Print kernel version for debugging
-    printk(KERN_INFO "ili9341: Loading module for kernel %s\n", UTS_RELEASE);
-
     // Get Raspberry Pi model
     const char *pi_model = get_pi_model();
-    printk(KERN_INFO "ili9341: Raspberry Pi model: %s\n", pi_model);
+    printk(KERN_INFO "ili9341: Loading module on %s\n", pi_model);
 
     // Get GPIO base address dynamically
     get_gpio_base_address();
