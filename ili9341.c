@@ -583,9 +583,18 @@ static int ili9341_probe(struct platform_device *pdev)
     // Get GPIO base address dynamically
     get_gpio_base_address();
 
+    // Map GPIO BEFORE doing anything else
+    gpio = ioremap(gpio_phys_base, BLOCKSIZE);
+    if (!gpio) {
+        printk(KERN_ERR "ili9341: Failed to ioremap GPIO at 0x%lx\n", gpio_phys_base);
+        return -EIO;
+    }
+    printk(KERN_INFO "ili9341: Mapped GPIO at virtual address %p\n", (void *)gpio);
+
     vmem_size = ili9341_var.width * ili9341_var.height * ili9341_var.bits_per_pixel/8;
     vmem = vzalloc(vmem_size);
     if (!vmem) {
+        iounmap(gpio);
         return -ENOMEM;
     }
     memset(vmem, 0, vmem_size);
@@ -594,6 +603,7 @@ static int ili9341_probe(struct platform_device *pdev)
     info = framebuffer_alloc(0, &pdev->dev);
     if (!info) {
         vfree(vmem);
+        iounmap(gpio);
         return -ENOMEM;
     }
 
@@ -613,25 +623,16 @@ static int ili9341_probe(struct platform_device *pdev)
 
     fb_deferred_io_init(info);
 
-    retval = register_framebuffer(info);
-    if (retval < 0) {
-        framebuffer_release(info);
-        vfree(vmem);
-        return retval;
-    }
-
     platform_set_drvdata(pdev, info);
 
-    // Use dynamic GPIO base address instead of hardcoded GPIO_BASE
-    gpio = ioremap(gpio_phys_base, BLOCKSIZE);
-    if (!gpio) {
-        printk(KERN_ERR "ili9341: Failed to ioremap GPIO at 0x%lx\n", gpio_phys_base);
-        unregister_framebuffer(info);
+    retval = register_framebuffer(info);
+    if (retval < 0) {
+        fb_deferred_io_cleanup(info);
         framebuffer_release(info);
         vfree(vmem);
-        return -EIO;
+        iounmap(gpio);
+        return retval;
     }
-    printk(KERN_INFO "ili9341: Mapped GPIO at virtual address %p\n", (void *)gpio);
 
     tft_init_board(info);
     tft_hard_reset();
