@@ -1,0 +1,65 @@
+/*
+ * Device Tree Overlay for ILI9341 parallel interface LCD
+ * Compatible with Raspberry Pi models (BCM2835, BCM2836, BCM2837, BCM2711)
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2835", "brcm,bcm2836", "brcm,bcm2837", "brcm,bcm2711";
+
+	fragment@0 {
+		target = <&gpio>;
+		__overlay__ {
+			ili9341_pins: ili9341_pins {
+				brcm,pins = <4 7 8 9 10 11 14 15 17 18 23 24 25 27>; /* DC,RW,DATA6,DATA0,IM0,DATA1,RD,DATA7,RESET,DATA2,DATA3,DATA4,DATA5,CS */
+				brcm,function = <1>; /* GPIO out */
+				brcm,pull = <0>; /* No pull */
+			};
+		};
+	};
+
+	fragment@1 {
+		target-path = "/soc";
+		__overlay__ {
+			ili9341_fb: ili9341 {
+				compatible = "ili,ili9341";
+				pinctrl-names = "default";
+				pinctrl-0 = <&ili9341_pins>;
+				status = "okay";
+				
+				/* GPIO pin definitions */
+				dc-gpios = <&gpio 4 0>;       /* DC pin */
+				cs-gpios = <&gpio 27 0>;      /* CS pin */
+				rd-gpios = <&gpio 14 0>;      /* RD pin */
+				rw-gpios = <&gpio 15 0>;      /* WR pin */
+				reset-gpios = <&gpio 17 0>;   /* RESET pin */
+				im0-gpios = <&gpio 10 1>;     /* IM0 pin (set high) */
+				
+				/* Data pins */
+				data0-gpios = <&gpio 9 0>;    /* DATA0 */
+				data1-gpios = <&gpio 11 0>;   /* DATA1 */
+				data2-gpios = <&gpio 18 0>;   /* DATA2 */
+				data3-gpios = <&gpio 23 0>;   /* DATA3 */
+				data4-gpios = <&gpio 24 0>;   /* DATA4 */
+				data5-gpios = <&gpio 25 0>;   /* DATA5 */
+				data6-gpios = <&gpio 8 0>;    /* DATA6 */
+				data7-gpios = <&gpio 7 0>;    /* DATA7 */
+				
+				/* Display configuration */
+				width = <320>;
+				height = <240>;
+				bits-per-pixel = <16>;
+				orientation = <0>; /* 0=landscape, 1=portrait */
+			};
+		};
+	};
+
+	__overrides__ {
+		/* Allow customization via config.txt */
+		/* Example: dtoverlay=ili9341,orientation=1 */
+		orientation = <&ili9341_fb>,"orientation:0";
+	};
+};
+
