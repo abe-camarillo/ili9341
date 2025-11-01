@@ -20,6 +20,7 @@
 #include <linux/of_address.h>
 #include <linux/version.h>
 #include <linux/ioport.h>
+#include <linux/utsname.h>
 
 
 #define BLOCKSIZE (4*1024)
@@ -63,7 +64,6 @@
 
 
 volatile unsigned *gpio;
-static void __iomem *gpio_mmio;
 static unsigned long gpio_phys_base;
 
 // Compatibility functions for Pi model detection
@@ -292,7 +292,7 @@ static void tft_init(struct fb_info *info)
 }
 
 // write memory to TFT
-static void ili9341_update_display_area(const struct fb_image *image)
+static void __maybe_unused ili9341_update_display_area(const struct fb_image *image)
 {
 	int x,y;
 	
@@ -335,7 +335,7 @@ static void ili9341_update_display_area(const struct fb_image *image)
 }
 
 
-static void ili9341_update_display_color_area(const struct fb_fillrect *rect)
+static void __maybe_unused ili9341_update_display_color_area(const struct fb_fillrect *rect)
 {
 	int x,y;
 	// set column
@@ -608,7 +608,7 @@ static int ili9341_probe(struct platform_device *pdev)
     info->fix.smem_start = (unsigned long)vmem;
     info->fix.smem_len = vmem_size;
     info->var = ili9341_var;
-    info->flags = FBINFO_DEFAULT | FBINFO_VIRTFB;
+    info->flags = FBINFO_VIRTFB;
 
     info->fbdefio = &ili9341_defio;
     if (0 < fps) {
@@ -647,7 +647,7 @@ static int ili9341_probe(struct platform_device *pdev)
 
 
 
-static int ili9341_remove(struct platform_device *dev)
+static void ili9341_remove(struct platform_device *dev)
 {
     struct fb_info *info = platform_get_drvdata(dev);
 
@@ -655,15 +655,9 @@ static int ili9341_remove(struct platform_device *dev)
         unregister_framebuffer(info);
         fb_deferred_io_cleanup(info);
         vfree((void __force *)info->screen_base);
-
-
-
         iounmap(gpio);
-        
-        
         framebuffer_release(info);
     }
-    return 0;
 }
 
 
