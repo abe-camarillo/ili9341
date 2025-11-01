@@ -3,6 +3,14 @@ ili9341
 A Raspberry pi framebuffer driver for the ili9341 lcd driver.
 I am using the NHD-2.4-240320SF-CTXI#-T1 (http://www.newhavendisplay.com/nhd24240320sfctxit1-p-3975.html)
 
+**Version 2.0 - Modernized for Raspberry Pi Zero 2W and recent kernels**
+
+This driver has been updated to support modern Raspberry Pi models including:
+- Raspberry Pi Zero 2W
+- Raspberry Pi 3/4
+- Recent Linux kernels (5.x, 6.x)
+- Dynamic GPIO base address detection via Device Tree
+
 
 NHD-2.4-240320SF-CTXI#-T1 Datasheet (http://www.newhavendisplay.com/specs/NHD-2.4-240320SF-CTXI-T1.pdf)
 ili9341 Datasheet (http://www.displayfuture.com/Display/datasheet/controller/ILI9341.pdf)
@@ -13,6 +21,22 @@ Installing:
    sudo insmod ili9341.ko
 this will create /dev/fb1.
 Use the new framebuffer (https://github.com/notro/fbtft/wiki/Framebuffer-use)
+
+Building:
+   make                      # Build kernel module
+   make clean                # Clean build artifacts
+   make dtbo                 # Build Device Tree overlay
+   make all-with-overlay     # Build both module and overlay
+   sudo make install         # Install module (or use make load to auto-load)
+   sudo make uninstall       # Remove module
+
+Improvements in v2.0:
+   - Dynamic GPIO base address detection from Device Tree
+   - Automatic Raspberry Pi model detection
+   - Support for Pi Zero 2W, Pi 3, Pi 4
+   - Kernel version compatibility checking
+   - Device Tree overlay support for hardware configuration
+   - Improved error handling and logging
 
 
 The physical part of things.

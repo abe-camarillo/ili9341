@@ -1,10 +1,8 @@
 /*
- * ili9342 LCD for Raspberry Pi Model B rev2
+ * ili9342 LCD for Raspberry Pi framebuffer driver
+ * Modernized for Raspberry Pi Zero 2W and recent kernels
  */
  
-#define BCM2708_PERI_BASE        0x20000000
-#define GPIO_BASE                (BCM2708_PERI_BASE + 0x200000) /* GPIO controller */
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -18,9 +16,18 @@
 #include <linux/backlight.h>
 #include <linux/platform_device.h>
 #include <linux/uaccess.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
+#include <linux/version.h>
+#include <linux/ioport.h>
 
 
 #define BLOCKSIZE (4*1024)
+
+// Kernel version compatibility
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
+#error "This driver requires Linux kernel 3.10 or newer"
+#endif
 
 // GPIO setup macros. Always use INP_GPIO(x) before using OUT_GPIO(x) or SET_GPIO_ALT(x,y)
 #define INP_GPIO(g) *(gpio+((g)/10)) &= ~(7<<(((g)%10)*3))
@@ -56,7 +63,70 @@
 
 
 volatile unsigned *gpio;
+static void __iomem *gpio_mmio;
+static unsigned long gpio_phys_base;
 
+// Compatibility functions for Pi model detection
+static const char* get_pi_model(void)
+{
+	struct device_node *root;
+	const char *model = "Unknown";
+
+	root = of_find_node_by_path("/");
+	if (root) {
+		if (of_property_read_string(root, "model", &model) != 0) {
+			model = "Unknown";
+		}
+		of_node_put(root);
+	}
+	return model;
+}
+
+// Get GPIO base address from Device Tree
+static int get_gpio_base_address(void)
+{
+	struct device_node *gpio_node;
+	struct resource res;
+	int ret = 0;
+
+	// Try to find GPIO node from Device Tree
+	gpio_node = of_find_compatible_node(NULL, NULL, "brcm,bcm2835-gpio");
+	if (!gpio_node) {
+		gpio_node = of_find_compatible_node(NULL, NULL, "brcm,bcm2711-gpio");
+	}
+	
+	if (gpio_node) {
+		ret = of_address_to_resource(gpio_node, 0, &res);
+		if (ret == 0) {
+			gpio_phys_base = res.start;
+			printk(KERN_INFO "ili9341: GPIO base address from DT: 0x%lx\n", gpio_phys_base);
+		}
+		of_node_put(gpio_node);
+	}
+	
+	// Fallback to legacy hardcoded values if DT lookup fails
+	if (ret != 0 || gpio_phys_base == 0) {
+		const char *model = get_pi_model();
+		printk(KERN_WARNING "ili9341: Could not read GPIO base from DT, using fallback\n");
+		printk(KERN_INFO "ili9341: Detected model: %s\n", model);
+		
+		// Check for various Pi models and use appropriate base
+		if (strstr(model, "Pi Zero 2") || strstr(model, "Pi 3") || strstr(model, "Pi 4")) {
+			// BCM2711 (Pi 4), BCM2837 (Pi 3/Zero 2W) use 0xFE000000
+			gpio_phys_base = 0xFE000000;
+		} else if (strstr(model, "Pi Zero") || strstr(model, "Pi 1") || strstr(model, "Pi 2")) {
+			// BCM2835 (Pi 1/Zero), BCM2836 (Pi 2) use 0x20000000
+			gpio_phys_base = 0x20000000;
+		} else {
+			// Default to old Pi 1/2 base
+			gpio_phys_base = 0x20000000;
+		}
+		gpio_phys_base += 0x200000; // Add GPIO offset
+		printk(KERN_INFO "ili9341: Using fallback GPIO base: 0x%lx\n", gpio_phys_base);
+	}
+	
+	return 0;
+}
 
 // Set to output
 static void gpio_setoutput(char g)
@@ -507,6 +577,15 @@ static int ili9341_probe(struct platform_device *pdev)
     int vmem_size;
     unsigned char *vmem;
 
+    // Print kernel version for debugging
+    printk(KERN_INFO "ili9341: Loading module for kernel %s\n", UTS_RELEASE);
+
+    // Get Raspberry Pi model
+    const char *pi_model = get_pi_model();
+    printk(KERN_INFO "ili9341: Raspberry Pi model: %s\n", pi_model);
+
+    // Get GPIO base address dynamically
+    get_gpio_base_address();
 
     vmem_size = ili9341_var.width * ili9341_var.height * ili9341_var.bits_per_pixel/8;
     vmem = vzalloc(vmem_size);
@@ -547,7 +626,16 @@ static int ili9341_probe(struct platform_device *pdev)
 
     platform_set_drvdata(pdev, info);
 
-    gpio = ioremap(GPIO_BASE, BLOCKSIZE);
+    // Use dynamic GPIO base address instead of hardcoded GPIO_BASE
+    gpio = ioremap(gpio_phys_base, BLOCKSIZE);
+    if (!gpio) {
+        printk(KERN_ERR "ili9341: Failed to ioremap GPIO at 0x%lx\n", gpio_phys_base);
+        unregister_framebuffer(info);
+        framebuffer_release(info);
+        vfree(vmem);
+        return -EIO;
+    }
+    printk(KERN_INFO "ili9341: Mapped GPIO at virtual address %p\n", (void *)gpio);
 
     tft_init_board(info);
     tft_hard_reset();
@@ -619,7 +707,9 @@ MODULE_PARM_DESC(fps, "Frames per second (default 25)");
 module_init(ili9341_init);
 module_exit(ili9341_exit);
 
-MODULE_DESCRIPTION("ili9341 LCD framebuffer driver");
+MODULE_DESCRIPTION("ili9341 LCD framebuffer driver for Raspberry Pi");
 MODULE_AUTHOR("sammyizimmy");
 MODULE_LICENSE("GPL");
+MODULE_VERSION("2.0");
+MODULE_ALIAS("platform:ili9341");
 
